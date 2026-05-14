@@ -1,0 +1,2 @@
+- name: teacher_forced_agent
+  _target_: recipe.opd_multi_teacher.v3.teacher_forced_agent_loop.TeacherForcedAgentLoop

@@ -1,0 +1,63 @@
+# --- Project Specific ---
+ref/
+dialogue_evaluation/
+output/
+logs/
+tmp
+*.log
+data_prep/dataset_generation/*.jsonl
+data/dataset/golden_history_input_test.jsonl
+task.md
+
+# Configuration & Secrets
+.env
+.env.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual Environments ---
+venv/
+env/
+.venv/
+.env/
+
+# --- IDE & Editor ---
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# --- Testing & Coverage ---
+.coverage
+htmlcov/
+.pytest_cache/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+.trae/*
+data/dataset/psychiatry/test_sampled_input.jsonl
+data_prep/data/psychiatry/generated_golden_history.jsonl

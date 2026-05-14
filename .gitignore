@@ -1,0 +1,68 @@
+# Python/cache artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.secret
+secrets.*
+credentials.*
+
+# Editor/system files
+.DS_Store
+.vscode/
+.idea/
+.agents/
+.codex/
+
+# Nested git repositories copied as plain source directories
+**/.git/
+
+# Runtime outputs and experiment artifacts
+output/
+outputs/
+my_custom_output/
+my_custom_output1/
+eval_results/
+results/
+runs/
+logs/
+wandb/
+tensorboard_log/
+checkpoints/
+checkpoint*/
+cache/
+.cache/
+intermediate/
+experiments/
+raw/
+
+# Large model/package/data artifacts
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+*.whl
+*.parquet
+*.jsonl
+*.log
+
+# Known generated data files outside ignored directories
+project/data_remake/normal_dual_full_mix.jsonl

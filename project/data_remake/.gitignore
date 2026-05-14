@@ -1,0 +1,11 @@
+*.json
+*.jsonl
+*.txt
+*.log
+*.tmp
+
+cache/
+logs/
+runs/
+experiments/
+outputs/

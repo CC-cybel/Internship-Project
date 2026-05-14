@@ -1,0 +1,85 @@
+defaults:
+  - /ppo_trainer
+  - _self_
+
+algorithm:
+  adv_estimator: grpo
+  use_kl_in_reward: False
+
+data:
+  train_files: /data/wangpf/project/data_remake/outputs/single_turn_rl_20k/single_turn_rl_20k.train.parquet
+  val_files: /data/wangpf/project/data_remake/outputs/single_turn_rl_20k/single_turn_rl_20k.val.parquet
+  train_batch_size: 128
+  max_prompt_length: 2048
+  max_response_length: 1024
+  filter_overlong_prompts: True
+  truncation: error
+  return_raw_chat: False
+  apply_chat_template_kwargs:
+    enable_thinking: False
+
+actor_rollout_ref:
+  model:
+    path: /data/wangpf/project/LlamaFactory/models/Qwen3-8B
+    use_remove_padding: True
+    enable_gradient_checkpointing: True
+
+  actor:
+    strategy: fsdp
+    optim:
+      lr: 1e-6
+    ppo_mini_batch_size: 64
+    ppo_micro_batch_size_per_gpu: 2
+    ppo_max_token_len_per_gpu: 12288
+    use_dynamic_bsz: True
+    use_kl_loss: True
+    kl_loss_coef: 0.001
+    kl_loss_type: low_var_kl
+    entropy_coeff: 0.0
+    fsdp_config:
+      param_offload: True
+      optimizer_offload: True
+
+  rollout:
+    name: vllm
+    mode: async
+    tensor_model_parallel_size: 1
+    n: 4
+    temperature: 1.0
+    top_p: 1.0
+    gpu_memory_utilization: 0.7
+    log_prob_micro_batch_size_per_gpu: 2
+    log_prob_max_token_len_per_gpu: 12288
+    val_kwargs:
+      n: 1
+      do_sample: False
+
+  ref:
+    fsdp_config:
+      param_offload: True
+
+critic:
+  enable: False
+
+reward_model:
+  enable: False
+  use_reward_loop: False
+  reward_manager: naive
+
+custom_reward_function:
+  path: recipe/single_turn_reward/reward_function.py
+  name: compute_score
+
+trainer:
+  project_name: verl_single_turn_rl
+  experiment_name: hard_dual_ppo
+  logger: ["console", "swanlab"]
+  nnodes: 1
+  n_gpus_per_node: 8
+  total_epochs: 1
+  test_freq: -1
+  save_freq: 100
+  val_before_train: False
+  log_val_generations: 8
+  rollout_data_dir: null
+  validation_data_dir: null

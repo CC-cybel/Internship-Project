@@ -46,8 +46,9 @@ deactivate 2>/dev/null || true
 : "${TEACHER_MAX_NUM_SEQS:=64}"
 : "${TEACHER_ENFORCE_EAGER:=True}"
 
-: "${DISTILL_LOSS_MODE:=reverse_kl_topk}"
+: "${DISTILL_LOSS_MODE:=reverse_kl_student_topk_gather}"
 : "${DISTILL_TOPK:=20}"
+: "${DISTILL_TEACHER_PROMPT_LOGPROBS:=}"
 : "${DISTILL_LOSS_MAX_CLAMP:=10.0}"
 : "${DISTILL_LOGPROB_MIN_CLAMP:=-10.0}"
 : "${LR:=1e-6}"
@@ -67,7 +68,7 @@ RUN_TAG="$(date +%Y%m%d_%H%M%S)"
 : "${OUTPUT_DIR:=${OUTPUT_BASE_DIR}/${EXP_NAME}}"
 : "${GENRM_IO_PATH:=${OUTPUT_DIR}/genrm_io.jsonl}"
 
-: "${SWANLAB_API_KEY:=ZqlCkcrue6FEBG24I91wi}"
+: "${SWANLAB_API_KEY:=}"
 : "${SWANLAB_MODE:=cloud}"
 : "${SWANLAB_LOG_DIR:=${OUTPUT_DIR}/swanlog}"
 
@@ -175,6 +176,10 @@ CMD=(
   "trainer.logger=[\"console\",\"swanlab\"]"
 )
 
+if [[ -n "${DISTILL_TEACHER_PROMPT_LOGPROBS}" ]]; then
+  CMD+=("+distillation.distillation_loss.teacher_prompt_logprobs=${DISTILL_TEACHER_PROMPT_LOGPROBS}")
+fi
+
 CMD+=("trainer.resume_mode=${RESUME_MODE}")
 if [[ -n "${RESUME_FROM_PATH}" ]]; then
   CMD+=("trainer.resume_from_path=${RESUME_FROM_PATH}")
@@ -186,7 +191,7 @@ echo "[INFO] contact_teacher=${CONTACT_TEACHER}"
 echo "[INFO] mid_teacher=${MID_TEACHER}"
 echo "[INFO] train_file=${TRAIN_FILE}"
 echo "[INFO] val_file=${VAL_FILE}"
-echo "[INFO] distill=${DISTILL_LOSS_MODE}, topk=${DISTILL_TOPK}, student_rollout=true"
+echo "[INFO] distill=${DISTILL_LOSS_MODE}, topk=${DISTILL_TOPK}, teacher_prompt_logprobs=${DISTILL_TEACHER_PROMPT_LOGPROBS:-auto}, student_rollout=true"
 echo "[INFO] swanlab_mode=${SWANLAB_MODE}, swanlab_log_dir=${SWANLAB_LOG_DIR}"
 echo "[INFO] log_val_generations=${LOG_VAL_GENERATIONS}, validation_data_dir=${VALIDATION_DATA_DIR}"
 echo "[INFO] collect_genrm_io=${COLLECT_GENRM_IO}, genrm_io_path=${GENRM_IO_PATH}"

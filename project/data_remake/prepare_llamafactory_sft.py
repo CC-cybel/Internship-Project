@@ -45,7 +45,9 @@ def normalize_role(role):
         return "human"
     if r in {"gpt", "assistant", "bot", "model"}:
         return "gpt"
-    return role
+    if isinstance(role, str):
+        return role
+    return None
 
 
 def serialize_assistant_value(value, mode):
@@ -80,7 +82,9 @@ def serialize_value(value):
 
 def is_valid_order(convs):
     for idx, msg in enumerate(convs):
-        role = msg.get("from")
+        role = normalize_role(msg.get("from"))
+        if role is None:
+            return False
         if idx % 2 == 0:
             if role not in {"human", "observation"}:
                 return False

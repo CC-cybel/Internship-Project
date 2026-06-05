@@ -443,6 +443,7 @@ class vLLMHttpServer:
         request_id: str,
         image_data: Optional[list[Any]] = None,
         video_data: Optional[list[Any]] = None,
+        prompt_target_token_ids: Optional[list[list[int]]] = None,
         priority: int = 0,
     ) -> TokenOutput:
         """Generate sequence with token-in-token-out."""
@@ -492,6 +493,10 @@ class vLLMHttpServer:
             f"max_tokens {max_tokens} exceeds available context space {max_possible_tokens}"
         )
         sampling_params["logprobs"] = 0 if sampling_params.pop("logprobs", False) else None
+        if prompt_target_token_ids is not None:
+            extra_args = dict(sampling_params.get("extra_args") or {})
+            extra_args["prompt_target_token_ids"] = prompt_target_token_ids
+            sampling_params["extra_args"] = extra_args
         sampling_params.setdefault("repetition_penalty", self.config.get("repetition_penalty", 1.0))
         sampling_params = SamplingParams(max_tokens=max_tokens, **sampling_params)
         prompt_ids = qwen2_5_vl_dedup_image_tokens(prompt_ids, self.model_config.processor)

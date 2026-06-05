@@ -36,7 +36,17 @@ def _get_teacher_sampling_params(
     if distillation_config.teacher_model.inference.temperature != 1.0:
         raise NotImplementedError("vLLM does not support temperature for prompt_logprobs.")
 
-    num_logprobs = distillation_loss_config.topk if distillation_loss_config.loss_settings.use_topk else 0
+    if distillation_loss_config.loss_settings.use_topk:
+        if distillation_loss_config.loss_mode == "reverse_kl_student_topk_gather":
+            num_logprobs = distillation_loss_config.topk
+        else:
+            num_logprobs = distillation_loss_config.teacher_prompt_logprobs
+            if num_logprobs is None:
+                num_logprobs = (
+                    -1 if distillation_loss_config.loss_mode == "reverse_kl_student_topk" else distillation_loss_config.topk
+                )
+    else:
+        num_logprobs = 0
     return {
         "max_tokens": 1,
         "temperature": distillation_config.teacher_model.inference.temperature,
@@ -109,16 +119,31 @@ class AsyncTeacherLLMServerManager(AsyncLLMServerManager):
     async def compute_teacher_logprobs_single(
         self,
         sequence_ids: list[int],
+        target_topk_ids: Optional[list[list[int]]] = None,
+        prompt_length: Optional[int] = None,
+        response_length: Optional[int] = None,
         multi_modal_data: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute teacher log probabilities for a single unpadded sequence."""
         multi_modal_data = multi_modal_data or {}
+        prompt_target_token_ids = None
+        if target_topk_ids is not None:
+            if prompt_length is None or response_length is None:
+                raise ValueError("target_topk_ids requires prompt_length and response_length.")
+            topk = len(target_topk_ids[0]) if target_topk_ids else 0
+            dummy_target_ids = list(range(topk))
+            prompt_target_token_ids = [dummy_target_ids[:] for _ in range(max(len(sequence_ids) - 1, 0))]
+            start = max(prompt_length - 1, 0)
+            for j in range(response_length):
+                if start + j < len(prompt_target_token_ids):
+                    prompt_target_token_ids[start + j] = [int(x) for x in target_topk_ids[j]]
         teacher_output = await self.generate(
             request_id=uuid4().hex,
             prompt_ids=sequence_ids,
             sampling_params=_get_teacher_sampling_params(self.distillation_config, self.distillation_loss_config),
             image_data=multi_modal_data.get("images"),
             video_data=multi_modal_data.get("videos"),
+            prompt_target_token_ids=prompt_target_token_ids,
         )
         # Shapes: # S, (1 or K), where S is the response length, K is either 1 or topk depending on
         # the distillation loss settings.
@@ -140,11 +165,18 @@ class AsyncTeacherLLMServerManager(AsyncLLMServerManager):
             item = data[i : i + 1]
             sequence_ids, prompt_length, response_length = _unpad_teacher_inputs(item)
             multi_modal_data = None if multi_modal_data_batch is None else multi_modal_data_batch[i]
+            target_topk_ids = None
+            if "student_topk_ids" in data.batch:
+                # student_topk_ids is already sliced to response logits by no_padding_2_padding.
+                target_topk_ids = data.batch["student_topk_ids"][i, :response_length].tolist()
             lengths.append((prompt_length, response_length))
             tasks.append(
                 asyncio.create_task(
                     self.compute_teacher_logprobs_single(
                         sequence_ids=sequence_ids,
+                        target_topk_ids=target_topk_ids,
+                        prompt_length=prompt_length,
+                        response_length=response_length,
                         multi_modal_data=multi_modal_data,
                     )
                 )
@@ -206,12 +238,19 @@ class AsyncTeacherLLMServerManager(AsyncLLMServerManager):
             item = data[i : i + 1]
             sequence_ids, prompt_length, response_length = _unpad_teacher_inputs(item)
             multi_modal_data = None if multi_modal_data_batch is None else multi_modal_data_batch[i]
+            target_topk_ids = None
+            if "student_topk_ids" in data.batch:
+                # student_topk_ids is already sliced to response logits by no_padding_2_padding.
+                target_topk_ids = data.batch["student_topk_ids"][i, :response_length].tolist()
             lengths.append((prompt_length, response_length))
             managers.append(manager)
             tasks.append(
                 asyncio.create_task(
                     manager.compute_teacher_logprobs_single(
                         sequence_ids=sequence_ids,
+                        target_topk_ids=target_topk_ids,
+                        prompt_length=prompt_length,
+                        response_length=response_length,
                         multi_modal_data=multi_modal_data,
                     )
                 )

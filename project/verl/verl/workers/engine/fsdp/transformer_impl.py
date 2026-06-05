@@ -1016,6 +1016,10 @@ class FSDPEngineWithLMHead(FSDPEngine):
         use_fused_kernels = tu.get_non_tensor_data(data=micro_batch, key="use_fused_kernels", default=False)
         calculate_entropy = tu.get_non_tensor_data(data=micro_batch, key="calculate_entropy", default=False)
         distillation_use_topk = tu.get_non_tensor_data(data=micro_batch, key="distillation_use_topk", default=False)
+        compute_student_topk = tu.get_non_tensor_data(data=micro_batch, key="compute_student_topk", default=False)
+        student_topk = tu.get_non_tensor_data(data=micro_batch, key="student_topk", default=0)
+        if compute_student_topk and use_fused_kernels:
+            raise NotImplementedError("compute_student_topk is not supported with fused kernels.")
 
         model_output = {}
 
@@ -1032,6 +1036,12 @@ class FSDPEngineWithLMHead(FSDPEngine):
             else:
                 logits_rmpad = output.logits.squeeze(0)  # (total_nnz, vocab_size)
                 logits_rmpad.div_(temperature_rmpad.clamp(min=1e-8).unsqueeze(-1).to(logits_rmpad.dtype))
+                if compute_student_topk:
+                    student_topk_log_probs, student_topk_ids = torch.topk(
+                        torch.log_softmax(logits_rmpad.float(), dim=-1),
+                        k=student_topk,
+                        dim=-1,
+                    )
 
                 # if use_sp: ((total_nnz / sp) + pad) ; if not use_sp: (batch, seqlen)
                 inplace_backward = True
@@ -1082,6 +1092,19 @@ class FSDPEngineWithLMHead(FSDPEngine):
                         unpad_dim=0,
                         padding_size=pad_size,
                     )
+                if compute_student_topk:
+                    student_topk_log_probs = gather_outputs_and_unpad(
+                        student_topk_log_probs,
+                        gather_dim=0,
+                        unpad_dim=0,
+                        padding_size=pad_size,
+                    )
+                    student_topk_ids = gather_outputs_and_unpad(
+                        student_topk_ids,
+                        gather_dim=0,
+                        unpad_dim=0,
+                        padding_size=pad_size,
+                    )
 
             if pad_mode == DatasetPadMode.NO_PADDING:
                 cu_seqlens = input_ids.offsets()
@@ -1089,6 +1112,11 @@ class FSDPEngineWithLMHead(FSDPEngine):
                 log_probs = torch.nested.nested_tensor_from_jagged(log_probs, cu_seqlens)
                 if calculate_entropy:
                     entropy = torch.nested.nested_tensor_from_jagged(entropy_rmpad, cu_seqlens)
+                if compute_student_topk:
+                    student_topk_log_probs = torch.nested.nested_tensor_from_jagged(
+                        student_topk_log_probs, cu_seqlens
+                    )
+                    student_topk_ids = torch.nested.nested_tensor_from_jagged(student_topk_ids, cu_seqlens)
             else:
                 raise NotImplementedError(f"pad_mode {pad_mode} not implemented")
 
@@ -1116,10 +1144,21 @@ class FSDPEngineWithLMHead(FSDPEngine):
                     starts = torch.zeros_like(seq_lengths, dtype=torch.int64)
                     logits = torch.nested.narrow(logits, 1, starts, seq_lengths, layout=torch.jagged)
                     logits_rmpad = torch.cat([t for t in logits.unbind()])
+                    if compute_student_topk:
+                        student_topk_log_probs, student_topk_ids = torch.topk(
+                            torch.log_softmax(logits_rmpad.float(), dim=-1),
+                            k=student_topk,
+                            dim=-1,
+                        )
                     input_ids_rmpad_rolled = output_args["input_ids_rmpad_rolled"]
                     log_probs = logprobs_from_logits(logits=logits_rmpad, labels=input_ids_rmpad_rolled)
                     # (bsz, j1), for each sample, length of each sample: [real_prompt_length + real_response_length]
                     log_probs = torch.nested.nested_tensor_from_jagged(log_probs, cu_seqlens)
+                    if compute_student_topk:
+                        student_topk_log_probs = torch.nested.nested_tensor_from_jagged(
+                            student_topk_log_probs, cu_seqlens
+                        )
+                        student_topk_ids = torch.nested.nested_tensor_from_jagged(student_topk_ids, cu_seqlens)
                     if calculate_entropy:
                         entropy = torch.nested.narrow(entropy, 1, starts, seq_lengths, layout=torch.jagged)
                         entropy_rmpad = torch.cat([t for t in entropy.unbind()])
@@ -1130,6 +1169,9 @@ class FSDPEngineWithLMHead(FSDPEngine):
         model_output["log_probs"] = log_probs
         if calculate_entropy:
             model_output["entropy"] = entropy
+        if compute_student_topk:
+            model_output["student_topk_log_probs"] = student_topk_log_probs
+            model_output["student_topk_ids"] = student_topk_ids.to(torch.int32)
 
         return model_output
 

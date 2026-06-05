@@ -10,21 +10,21 @@ from openai import OpenAI
 from tqdm import tqdm
 
 # ================= 配置区域 =================
-INPUT_FILE = "outputs/normal_dataset_rewrite.json"  # 您的重写结果文件
-REPORT_FILE = "outputs/judge/dialogue_quality_report.json"
-BAD_CASE_FILE = "outputs/judge/failed_dialogues.json"
-STATS_FILE = "outputs/judge/dialogue_quality_stats.json"
-CACHE_DIR = "cache/judge"
+INPUT_FILE = "/data/chengch/project/data_remake/runs/hard_rewrite_v2.json"  # 您的重写结果文件
+REPORT_FILE = "/data/chengch/project/data_remake/intermediatedialogue_quality_report.json"
+BAD_CASE_FILE = "/data/chengch/project/data_remake/outputs/judge/failed_dialogues.json"
+STATS_FILE = "/data/chengch/project/data_remake/outputs/judge/dialogue_quality_stats.json"
+CACHE_DIR = "/data/chengch/project/data_remake/cache/judge"
 SAVE_EVERY = 50
 MAX_RETRIES = 3
 RETRY_BASE_SECONDS = 1.0
 RETRY_JITTER_SECONDS = 0.3
-MAX_WORKERS = 5
+MAX_WORKERS = 40
 PROCESSED_FLAG = "_judge_done"
 
-API_KEY = "sk-tvlIzuuCVF8fDUfIdAEoa6cCarcsMJX1j8LyfLPF3XnQfGJa" 
-BASE_URL = "https://yunwu.zeabur.app/v1"
-MODEL_NAME = "gemini-3-flash-preview-nothinking"
+API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
+BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+MODEL_NAME = os.environ.get("DASHSCOPE_MODEL_NAME", "deepseek-v4-flash")
 
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 cache_lock = threading.Lock()

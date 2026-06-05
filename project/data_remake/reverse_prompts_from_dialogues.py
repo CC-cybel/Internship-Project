@@ -21,7 +21,7 @@ RETRY_BASE_SECONDS = 1.0                 # 重试基础等待
 RETRY_JITTER_SECONDS = 0.3               # 重试抖动
 PROCESSED_FLAG = "_reverse_done"         # 处理完成标记字段
 
-API_KEY = "sk-tvlIzuuCVF8fDUfIdAEoa6cCarcsMJX1j8LyfLPF3XnQfGJa" 
+API_KEY = ""
 BASE_URL = "https://yunwu.zeabur.app/v1"
 MODEL_NAME = "gemini-3-flash-preview-nothinking"
 MAX_WORKERS = 5
@@ -270,19 +270,19 @@ def process_single_item(item, index, item_key):
         final_prompt = LOGIC_REVERSE_TEMPLATE.format(dialog_text=dialog_text)
 
         raw_content = call_llm(final_prompt)
-        
+
         # --- 核心备份功能：无论解析是否成功，先存入txt ---
         save_raw_log(index, raw_content)
-        
+
         # 尝试解析 JSON
         result = parse_json_strict(raw_content)
         if not result:
             raise ValueError("Invalid JSON response")
-        
+
         if result.get('system_prompt'):
             item['system'] = normalize_system_prompt(result.get('system_prompt'))
             item[PROCESSED_FLAG] = True
-        
+
         cache_payload = {
             "key": item_key,
             "index": index,
@@ -327,7 +327,7 @@ def main():
 
     with open(INPUT_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    
+
     data_list = data['items'] if isinstance(data, dict) and 'items' in data else data
     total = len(data_list)
     results = [None] * total

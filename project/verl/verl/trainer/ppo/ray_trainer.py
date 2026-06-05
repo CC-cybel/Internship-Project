@@ -519,6 +519,12 @@ class RayPPOTrainer:
     def _should_compute_teacher_colocate(self, batch: DataProto) -> bool:
         return self.use_teacher_policy and not self.distillation_config.teacher_model.enable_resource_pool
 
+    def _use_student_topk_teacher_gather(self) -> bool:
+        return (
+            self.distillation_config is not None
+            and self.distillation_config.distillation_loss.loss_mode == "reverse_kl_student_topk_gather"
+        )
+
     def _compute_teacher_colocate(self, batch: DataProto) -> DataProto:
         """Compute teacher logprobs after rollout when teacher and student are colocated."""
         assert self.teacher_model_manager is not None, "TeacherModelManager is None"
@@ -1194,24 +1200,34 @@ class RayPPOTrainer:
             # step 2: convert from padding to nopadding
             batch_td = left_right_2_no_padding(batch_td)
             # step 3: add meta info
-            tu.assign_non_tensor(batch_td, calculate_entropy=True, compute_loss=False)
+            metadata = {"calculate_entropy": True, "compute_loss": False}
+            if self._use_student_topk_teacher_gather():
+                metadata["compute_student_topk"] = True
+                metadata["student_topk"] = self.distillation_config.distillation_loss.topk
+            tu.assign_non_tensor(batch_td, **metadata)
             output = self.actor_rollout_wg.compute_log_prob(batch_td)
             # gather output
             entropy = tu.get(output, "entropy")
             log_probs = tu.get(output, "log_probs")
             routed_experts = tu.get(output, "routed_experts")
+            student_topk_log_probs = tu.get(output, "student_topk_log_probs")
+            student_topk_ids = tu.get(output, "student_topk_ids")
 
             old_log_prob_mfu = tu.get(output, "metrics")["mfu"]
             # step 4. No padding to padding
             entropy = no_padding_2_padding(entropy, batch_td)
             log_probs = no_padding_2_padding(log_probs, batch_td)
+            if student_topk_ids is not None:
+                student_topk_log_probs = no_padding_2_padding(student_topk_log_probs, batch_td)
+                student_topk_ids = no_padding_2_padding(student_topk_ids, batch_td)
             # step 5: rebuild a tensordict and convert to dataproto
+            tensors = {"old_log_probs": log_probs.float(), "entropys": entropy.float()}
+            if student_topk_ids is not None:
+                tensors["student_topk_log_probs"] = student_topk_log_probs.float()
+                tensors["student_topk_ids"] = student_topk_ids.to(torch.int32)
             if routed_experts is not None:
-                old_log_prob = tu.get_tensordict(
-                    {"old_log_probs": log_probs.float(), "entropys": entropy.float(), "routed_experts": routed_experts}
-                )
-            else:
-                old_log_prob = tu.get_tensordict({"old_log_probs": log_probs.float(), "entropys": entropy.float()})
+                tensors["routed_experts"] = routed_experts
+            old_log_prob = tu.get_tensordict(tensors)
             old_log_prob = DataProto.from_tensordict(old_log_prob)
         else:
             old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
@@ -1423,7 +1439,7 @@ class RayPPOTrainer:
                     batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     self._drop_duplicate_non_tensor_keys(batch, gen_batch_output)
                     batch = batch.union(gen_batch_output)
-                    if self._should_compute_teacher_colocate(batch):
+                    if self._should_compute_teacher_colocate(batch) and not self._use_student_topk_teacher_gather():
                         with marked_timer("teacher", timing_raw, color="cyan"):
                             batch_teacher = self._compute_teacher_colocate(batch)
                             batch = batch.union(batch_teacher)
@@ -1496,6 +1512,10 @@ class RayPPOTrainer:
                                     "it should not be set when using R2 mode."
                                 )
                             batch = batch.union(old_log_prob)
+                            if self._should_compute_teacher_colocate(batch) and self._use_student_topk_teacher_gather():
+                                with marked_timer("teacher", timing_raw, color="cyan"):
+                                    batch_teacher = self._compute_teacher_colocate(batch)
+                                    batch = batch.union(batch_teacher)
                             if "rollout_log_probs" in batch.batch.keys():
                                 # TODO: we may want to add diff of probs too.
                                 from verl.utils.debug.metrics import calculate_debug_metrics

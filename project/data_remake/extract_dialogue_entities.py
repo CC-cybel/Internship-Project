@@ -8,7 +8,7 @@ from tqdm import tqdm
 INPUT_FILE = "experiments/cleaned_data_sample_5.json"           # 您的原始数据
 OUTPUT_FILE = "experiments/dataset_with_system.json"   # 处理后的输出文件
 
-API_KEY = "sk-25587b057d5242428bb940d44035b5fd"   # 您的 API Key
+API_KEY = ""   # 您的 API Key
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1" # 以阿里 Qwen 为例
 MODEL_NAME = "deepseek-v3.1"                  # 建议用 Plus 或 Max，提取能力更强
 MAX_WORKERS = 1                         # 并发线程数

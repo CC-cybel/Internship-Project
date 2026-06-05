@@ -135,15 +135,25 @@ def compute_topk_loss(
         case "fsdp":
             import verl.trainer.distillation.fsdp.losses as fsdp_losses
 
-            if distillation_config.distillation_loss.loss_mode == "reverse_kl_topk":
+            if distillation_config.distillation_loss.loss_mode == "reverse_kl_student_topk_gather":
+                distillation_loss_fn = fsdp_losses.compute_reverse_kl_student_topk_gather
+            elif distillation_config.distillation_loss.loss_mode == "reverse_kl_student_topk":
+                distillation_loss_fn = fsdp_losses.compute_reverse_kl_student_topk
+            elif distillation_config.distillation_loss.loss_mode == "reverse_kl_topk":
                 distillation_loss_fn = fsdp_losses.compute_reverse_kl_topk
             else:
                 distillation_loss_fn = fsdp_losses.compute_forward_kl_topk
         case "megatron":
             import verl.trainer.distillation.megatron.losses as megatron_losses
 
-            if distillation_config.distillation_loss.loss_mode == "reverse_kl_topk":
-                raise NotImplementedError("reverse_kl_topk is currently implemented for FSDP only.")
+            if distillation_config.distillation_loss.loss_mode in [
+                "reverse_kl_topk",
+                "reverse_kl_student_topk",
+                "reverse_kl_student_topk_gather",
+            ]:
+                raise NotImplementedError(
+                    f"{distillation_config.distillation_loss.loss_mode} is currently implemented for FSDP only."
+                )
             distillation_loss_fn = megatron_losses.compute_forward_kl_topk
         case _:
             raise NotImplementedError(f"Unsupported strategy: {config.strategy=}")
@@ -287,7 +297,10 @@ def distillation_loss(
 
 
 @register_distillation_loss(
-    DistillationLossSettings(names=["forward_kl_topk", "reverse_kl_topk"], use_topk=True)
+    DistillationLossSettings(
+        names=["forward_kl_topk", "reverse_kl_topk", "reverse_kl_student_topk", "reverse_kl_student_topk_gather"],
+        use_topk=True,
+    )
 )  # type: ignore[arg-type]
 def compute_topk_kl(
     config: ActorConfig,
@@ -319,6 +332,26 @@ def compute_topk_kl(
         "distillation/teacher_mass_min": Metric(AggregationType.MIN, teacher_mass.min()),
         "distillation/teacher_mass_max": Metric(AggregationType.MAX, teacher_mass.max()),
     }
+    if "topk_overlap_rate" in model_output:
+        topk_overlap_rate = no_padding_2_padding(model_output["topk_overlap_rate"], data)
+        topk_overlap_count = no_padding_2_padding(model_output["topk_overlap_count"], data)
+        overlap_token_advantage = no_padding_2_padding(model_output["overlap_token_advantage"], data)
+        assert (
+            topk_overlap_rate.shape
+            == topk_overlap_count.shape
+            == overlap_token_advantage.shape
+            == response_mask_bool.shape
+        )
+        topk_overlap_rate = topk_overlap_rate[response_mask_bool]
+        topk_overlap_count = topk_overlap_count[response_mask_bool]
+        overlap_token_advantage = overlap_token_advantage[response_mask_bool]
+        distillation_metrics.update(
+            {
+                "distillation/topk_overlap_rate": topk_overlap_rate.mean().item(),
+                "distillation/topk_overlap_count": topk_overlap_count.mean().item(),
+                "distillation/overlap_token_advantage": overlap_token_advantage.mean().item(),
+            }
+        )
 
     # Due to use of top-k, student and teacher distributions don't sum to 1 -> divergences can be negative.
     distillation_losses = distillation_losses.clamp_min(0.0)

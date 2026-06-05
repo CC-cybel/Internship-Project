@@ -49,6 +49,11 @@ class DistillationLossConfig(BaseConfig):
     log_prob_min_clamp (float, optional):
         Minimum value to clamp log probabilities for stability, e.g., log q - log p where p or q are
         very close to zero. If None, no clamping is applied.
+    teacher_prompt_logprobs (int, optional):
+        Number of prompt logprobs to request from the teacher engine for top-k distillation.
+        If loss_mode is reverse_kl_student_topk and this is unset, all prompt logprobs are requested
+        with vLLM's -1 mode so teacher probabilities can be gathered at the student top-k ids.
+        reverse_kl_student_topk_gather ignores this value and asks vLLM to gather specified token ids.
     use_policy_gradient (bool):
         Whether to incorporate distillation loss as a reward, as done
         by https://thinkingmachines.ai/blog/on-policy-distillation/. Recommended to use loss_mode=k1.
@@ -72,6 +77,7 @@ class DistillationLossConfig(BaseConfig):
     distillation_loss_coef: float = 1.0
     loss_max_clamp: Optional[float] = 10.0
     log_prob_min_clamp: Optional[float] = -10.0
+    teacher_prompt_logprobs: Optional[int] = None
 
     use_policy_gradient: bool = True
     policy_loss_mode: str = "vanilla"
@@ -203,17 +209,32 @@ class DistillationConfig(BaseConfig):
         engine_kwargs = self.teacher_model.inference.engine_kwargs
         if not self.distillation_loss.loss_settings.use_topk or self.distillation_loss.topk is None or not self.enabled:
             return
+        if self.distillation_loss.loss_mode == "reverse_kl_student_topk_gather":
+            requested_logprobs = self.distillation_loss.topk
+        else:
+            requested_logprobs = self.distillation_loss.teacher_prompt_logprobs
+            if requested_logprobs is None:
+                if self.distillation_loss.loss_mode == "reverse_kl_student_topk":
+                    requested_logprobs = -1
+                else:
+                    requested_logprobs = self.distillation_loss.topk
         match engine_name:
             case "vllm":
                 vllm_engine_kwargs = dict(engine_kwargs.get("vllm", {}))
                 max_logprobs = vllm_engine_kwargs.get("max_logprobs")
                 if max_logprobs is None:
-                    vllm_engine_kwargs["max_logprobs"] = self.distillation_loss.topk
-                    max_logprobs = self.distillation_loss.topk
-                if max_logprobs < self.distillation_loss.topk:
+                    vllm_engine_kwargs["max_logprobs"] = requested_logprobs
+                    max_logprobs = requested_logprobs
+                if requested_logprobs == -1 and max_logprobs != -1:
+                    raise ValueError(
+                        "reverse_kl_student_topk requires teacher prompt_logprobs=-1 for exact teacher "
+                        "probabilities at the student top-k ids. Set "
+                        "distillation.teacher_model.inference.engine_kwargs.vllm.max_logprobs=-1."
+                    )
+                if requested_logprobs != -1 and max_logprobs != -1 and max_logprobs < requested_logprobs:
                     raise ValueError(
                         f"VLLM max_logprobs ({max_logprobs}) must be >= distillation_loss topk "
-                        f"({self.distillation_loss.topk}) to enable distillation loss computation."
+                        f"({requested_logprobs}) to enable distillation loss computation."
                     )
                 engine_kwargs["vllm"] = vllm_engine_kwargs
             case _:

@@ -18,7 +18,7 @@ if [[ "${CLEAR_BAD_PROXY}" == "1" ]]; then
 fi
 
 : "${TONGYI_API_BASE:=https://dashscope.aliyuncs.com/compatible-mode/v1}"
-: "${TONGYI_API_KEY:=sk-f76c711b79a24e358d6fa4ca4c69d670}"
+: "${TONGYI_API_KEY:=}"
 : "${JUDGE_MODEL:=qwen-max}"
 
 : "${MODEL_PATH:=/data1/chengch/models/qwen3_8b_normal_mid}"
@@ -74,7 +74,7 @@ fi
 : "${GENRM_IO_PATH:=${OUTPUT_DIR}/genrm_io.jsonl}"
 : "${SFT_OUTPUT_PATH:=${OUTPUT_DIR}/high_score_sft.jsonl}"
 
-: "${SWANLAB_API_KEY:=ZqlCkcrue6FEBG24I91wi}"
+: "${SWANLAB_API_KEY:=}"
 : "${SWANLAB_MODE:=cloud}"
 : "${SWANLAB_LOG_DIR:=${OUTPUT_DIR}/swanlog}"
 

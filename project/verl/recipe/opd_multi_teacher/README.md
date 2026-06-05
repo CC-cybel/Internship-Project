@@ -26,3 +26,8 @@ TEACHER_TP=2 TRAIN_BATCH_SIZE=8 bash recipe/opd_multi_teacher/run_opd_multi_teac
 REBUILD_DATA=true bash recipe/opd_multi_teacher/run_opd_multi_teacher_qwen3_8b.sh
 DISTILL_TOPK=32 bash recipe/opd_multi_teacher/run_opd_multi_teacher_qwen3_8b.sh
 ```
+现在有好多模式：
+forward_kl_topk：teacher进行roll_out，不属于正式的opd。
+reverse_kl_topk:选取teacher的前topk个蒸馏
+reverse_kl_student_topk:选取student的前topk个蒸馏，但很慢
+reverse_kl_student_topk_gather:选取student前topk个蒸馏，优化版本。

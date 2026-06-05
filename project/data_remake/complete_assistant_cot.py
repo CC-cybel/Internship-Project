@@ -10,10 +10,10 @@ from tqdm import tqdm
 INPUT_FILE = "experiments/final_dataset.json"           # 您的原始带有 <think> 标签的数据
 OUTPUT_FILE = "experiments/final_dataset_rewrite.json"    # 输出文件
 
-API_KEY = "sk-25587b057d5242428bb940d44035b5fd" 
+API_KEY = ""
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 MODEL_NAME = "qwen-plus"
-MAX_WORKERS = 5                          
+MAX_WORKERS = 5
 
 # 强制注入的概率 (例如 30% 的数据会被改写为强制执行模式)
 FORCE_INJECTION_RATE = 0.3
@@ -25,7 +25,7 @@ COT_COMPLETION_PROMPT = """
 
 # Input Data
 ## Context
-System Prompt: 
+System Prompt:
 {system_prompt}
 
 Conversation History:
@@ -85,12 +85,12 @@ def parse_original_response(text):
     # 提取旧标签（作为 Prompt 的输入参考）
     match = re.search(r"<think>(.*?)</think>", text, flags=re.DOTALL)
     old_label = match.group(1).strip() if match else "通用回复"
-    
+
     # 提取纯净正文（这将作为最终的 response，绝对不改动一个字）
     # 注意：这里我们只去掉了 <think> 标签，保留了所有标点、<sep> 等原始痕迹
     # 如果您的原始数据包含 <sep> 且希望保留，这里就不要 replace
     clean_text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    
+
     return old_label, clean_text
 
 def format_history(conversations, current_idx):
@@ -121,17 +121,17 @@ def process_single_item(entry, index):
         i = 0
         while i < len(conversations):
             turn = conversations[i]
-            
+
             if turn['from'] == 'human':
                 user_content = turn['value']
-                
+
                 # -------------------------------------------------
                 # 核心逻辑：判断下一轮 GPT 回复的意图，决定是否注入
                 # -------------------------------------------------
                 next_gpt_turn = None
                 original_label = ""
                 actual_response = ""
-                
+
                 if i + 1 < len(conversations):
                     next_gpt_turn = conversations[i+1]
                     original_label, actual_response = parse_original_response(next_gpt_turn['value'])
@@ -146,22 +146,22 @@ def process_single_item(entry, index):
                     # 拼接到 User Input 后面
                     user_content = f"{user_content}\n<action>{original_label}</action>"
                     is_force_mode = True
-                
+
                 # 添加 User 轮次
                 new_conversations.append({
                     "from": "human",
                     "value": user_content
                 })
-                
+
                 # 处理 GPT 轮次 (补全 Thought)
                 if next_gpt_turn:
                     original_full_text = next_gpt_turn['value']
-            
+
                     # 1. 提取“不可变”的原始回复文本
-                    old_label, immutable_response_text = parse_original_response(original_full_text)    
+                    old_label, immutable_response_text = parse_original_response(original_full_text)
                     # 准备 Prompt
                     history_text = format_history(conversations, i) # 获取当前之前的历史
-                    
+
                     full_prompt = COT_COMPLETION_PROMPT.format(
                         system_prompt=system_prompt,
                         history_text=history_text,
@@ -181,7 +181,7 @@ def process_single_item(entry, index):
                         response_format={"type": "json_object"},
                         temperature=0.3 # 低温，保证逻辑严谨
                     )
-                    
+
                     # 2. 解析 LLM 返回的 JSON (只取 thought 和 slot_values)
                     llm_output = json.loads(response.choices[0].message.content)
 
@@ -200,11 +200,11 @@ def process_single_item(entry, index):
                         "from": "gpt",
                         "value": json.dumps(final_gpt_json, ensure_ascii=False)
                     })
-                    
+
                     i += 1 # 跳过原来的 GPT 轮次
-            
+
             i += 1
-            
+
         # 返回处理完的一整条对话
         new_entry = entry.copy()
         new_entry['conversations'] = new_conversations
@@ -221,18 +221,18 @@ def main():
     print(f"📂 读取数据: {INPUT_FILE}")
     with open(INPUT_FILE, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    
+
     # 兼容处理
     if isinstance(data, dict) and 'items' in data: data = data['items']
-    
+
     total = len(data)
     print(f"🚀 开始补全思维链 (FORCE_RATE={FORCE_INJECTION_RATE})，共 {total} 条...")
 
     results = [None] * total
-    
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_idx = {
-            executor.submit(process_single_item, item, i): i 
+            executor.submit(process_single_item, item, i): i
             for i, item in enumerate(data)
         }
 
@@ -247,7 +247,7 @@ def main():
     # 保存
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=4, ensure_ascii=False)
-    
+
     print(f"✅ 完成！文件已保存至: {OUTPUT_FILE}")
 
 if __name__ == "__main__":

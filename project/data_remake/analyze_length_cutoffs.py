@@ -41,7 +41,23 @@ def parse_args() -> argparse.Namespace:
 
 def load_items(path: str) -> list[dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        content = f.read().strip()
+
+    if not content:
+        return []
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        out: list[dict[str, Any]] = []
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            item = json.loads(line)
+            if isinstance(item, dict):
+                out.append(item)
+        return out
 
     if isinstance(data, dict) and isinstance(data.get("items"), list):
         items = data["items"]

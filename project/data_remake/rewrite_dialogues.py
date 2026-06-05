@@ -24,7 +24,7 @@ RETRY_JITTER_SECONDS = 0.3
 MAX_WORKERS = 2
 PROCESSED_FLAG = "_rewrite_done"
 
-API_KEY = "sk-2dc509b082d1468b9e43fe79c9baede2"
+API_KEY = ""
 BASE_URL = "https://api.deepseek.com"
 MODEL_NAME = "deepseek-v4-flash"
 TEMPERATURE = 0.8

@@ -183,10 +183,10 @@ def rewrite_output_format_block(system_text: str, mode: str) -> str:
     if not isinstance(system_text, str):
         return system_text
 
-    marker = "输出格式规范："
+    marker_match = re.search(r"\[?输出格式规范\]?\s*[:：]?", system_text)
     prefix = system_text
-    if marker in system_text:
-        prefix = system_text[: system_text.find(marker)].rstrip()
+    if marker_match:
+        prefix = system_text[: marker_match.start()].rstrip()
 
     if mode == MODE_RESPONSE:
         return prefix

@@ -10,3 +10,4 @@ cd "${PROJECT_DIR}"
 "${PYTHON_BIN}" recipe/dual_zscore_grpo/tests/test_dual_zscore_advantage.py
 "${PYTHON_BIN}" recipe/dual_zscore_grpo/tests/alpha_sweep_toy.py --output-mode raw
 "${PYTHON_BIN}" recipe/dual_zscore_grpo/tests/alpha_sweep_random.py --output-mode raw --trials 100
+

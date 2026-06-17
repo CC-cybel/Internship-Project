@@ -1,0 +1,12 @@
+{
+  "active_version": "contact_rubric_v001.json",
+  "versions": [
+    {
+      "file": "contact_rubric_v001.json",
+      "created_at_step": 0,
+      "source": "manual_seed",
+      "based_on": null,
+      "review_summary": "Initial semantic contact-stage rubric set. Hard penalties are outside rubric JSON."
+    }
+  ]
+}

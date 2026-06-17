@@ -22,7 +22,7 @@ RETRY_JITTER_SECONDS = 0.3                       # 重试抖动
 MAX_WORKERS = 5
 PROCESSED_FLAG = "_rewrite_done"
 
-API_KEY = ""
+API_KEY = "your_api_key_here"
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 MODEL_NAME = "qwen3.6-plus"
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)

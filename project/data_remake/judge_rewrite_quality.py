@@ -22,7 +22,7 @@ RETRY_JITTER_SECONDS = 0.3
 MAX_WORKERS = 40
 PROCESSED_FLAG = "_judge_done"
 
-API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
+API_KEY = os.environ.get("DASHSCOPE_API_KEY", "your_api_key_here")
 BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 MODEL_NAME = os.environ.get("DASHSCOPE_MODEL_NAME", "deepseek-v4-flash")
 

@@ -11,7 +11,7 @@
   },
   "banned_terms": {
     "terms": ["其实", "说明", "明白", "直接", "好的", "收到", "了解", "原来是","确实"],
-    "penalty": 0.1,
+    "penalty": 0.2,
     "match_type": "literal",
     "dedupe": true
   }

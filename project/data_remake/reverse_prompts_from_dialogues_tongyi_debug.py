@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=180.0, help="Single API request timeout in seconds.")
     parser.add_argument("--model", default=os.getenv("JUDGE_MODEL", "deepseek-v4-flash"))
     parser.add_argument("--base-url", default=os.getenv("TONGYI_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
-    parser.add_argument("--api-key", default="")
+    parser.add_argument("--api-key", default="your_api_key_here")
     parser.add_argument("--temperature", type=float, default=0.3)
     parser.add_argument("--force", action="store_true", help="Ignore existing debug cache and call the API again.")
     return parser.parse_args()

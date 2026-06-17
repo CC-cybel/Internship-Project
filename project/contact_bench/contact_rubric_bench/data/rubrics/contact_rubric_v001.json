@@ -1,0 +1,151 @@
+{
+  "rubric_set_id": "contact_stage4_semantic",
+  "version": "contact_rubric_v001",
+  "created_at_step": 0,
+  "source": "manual_seed",
+  "description": "LLM judge only semantic rubrics for contact-stage reward. Hard penalties are intentionally kept outside this file.",
+  "score_scale": {
+    "min": 0,
+    "max": 2,
+    "meaning": {
+      "0": "未满足或明显违规",
+      "1": "部分满足，但泛化、薄弱或承接不足",
+      "2": "充分满足，证据清楚且适合当前用户"
+    }
+  },
+  "rubrics": [
+    {
+      "id": "sys_instruction_following",
+      "name_cn": "系统提示指令跟随",
+      "stage": "contact",
+      "rule_type": "gate",
+      "evaluation_type": "llm",
+      "weight": 0.22,
+      "enabled": true,
+      "trigger_condition": "system_prompt 中包含留联渠道、轮次、分龄、禁用表达等与当前回复相关的要求",
+      "description": "当前回复必须遵守 system_prompt 中与留联相关的指令，尤其是35岁上下电话/微信优先级、指定轮次留联、已知渠道优先级等。",
+      "fail_policy": {
+        "if_score_lte": 0,
+        "score_cap": 0.0,
+        "reason": "未遵守system_prompt中的硬性留联指令"
+      },
+      "score_levels": {
+        "0": "明确违反 system_prompt 中当前应遵守的留联要求",
+        "1": "大体遵守但存在模糊、遗漏或边界不清",
+        "2": "严格遵守当前样本的留联要求"
+      }
+    },
+    {
+      "id": "first_contact_personalized_value",
+      "name_cn": "首次套联针对性",
+      "stage": "first_contact",
+      "rule_type": "quality",
+      "evaluation_type": "llm",
+      "weight": 0.18,
+      "enabled": true,
+      "trigger_condition": "当前回复是首次尝试索要电话、微信或其他联系方式",
+      "description": "首次套联给出的价值交换应结合用户主诉、身份、年龄、担忧、用药、孩子/家属等具体信息；换成其他用户仍成立的泛化话术不能给高分。",
+      "score_levels": {
+        "0": "只说评估、方案、老师联系等泛化话术，几乎不依赖当前用户信息",
+        "1": "提到当前问题，但福利仍较空泛或可替换性强",
+        "2": "福利明确绑定当前用户的具体问题、风险、身份或下一步需求"
+      }
+    },
+    {
+      "id": "benefit_strength",
+      "name_cn": "福利性强度",
+      "stage": "contact",
+      "rule_type": "quality",
+      "evaluation_type": "llm",
+      "weight": 0.16,
+      "enabled": true,
+      "trigger_condition": "当前回复尝试索要联系方式",
+      "description": "索要联系方式时需要给出足够强的利他价值，例如免费电话、具体调整建议、同类案例、风险规避、可转给家属参考等，而不是只有干巴巴的深度评估。",
+      "score_levels": {
+        "0": "只有空泛评估或具体方案承诺，没有真实可感知福利",
+        "1": "有福利但力度一般，缺少具体结果或用户可获得物",
+        "2": "福利具体、有吸引力，并能解释为什么现在留联对用户有帮助"
+      }
+    },
+    {
+      "id": "pre_contact_case_summary",
+      "name_cn": "套联前分析总结",
+      "stage": "contact",
+      "rule_type": "quality",
+      "evaluation_type": "llm",
+      "weight": 0.2,
+      "enabled": true,
+      "trigger_condition": "当前回复尝试索要联系方式；评估索要电话、微信或其他联系方式前的用户可见病情或需求分析总结，若没有此类套联前总结则 triggered=true 且 score=0；若有 <sep>，重点评估首次索联前、尤其是第一个 <sep> 前的总结内容",
+      "description": "套联前的分析总结应结合用户已提供的年龄、症状、病程、既往史、用药史、身份或照护关系、核心担忧等具体信息，给出专业、可信、克制的归纳和风险判断，让用户感到当前顾问理解了自己的情况；不能只是泛泛复述或空洞铺垫。",
+      "score_levels": {
+        "0": "没有套联前分析总结，或只泛泛说情况需要重视、建议评估等，几乎不体现当前用户信息",
+        "1": "有总结并提到部分用户信息，但分析浅、承接弱、专业判断不足或可替换性仍较强",
+        "2": "套联前总结准确抓住用户具体情况，归纳症状、年龄、病史等关键信息，并给出专业克制的风险或下一步判断"
+      }
+    },
+    {
+      "id": "repeat_contact_continuity",
+      "name_cn": "二次套联承接",
+      "stage": "repeat_contact",
+      "rule_type": "quality",
+      "evaluation_type": "llm",
+      "weight": 0.14,
+      "enabled": true,
+      "trigger_condition": "历史轮次中已经出现过索要联系方式，当前回复再次索要或再次引导留联",
+      "description": "再次套联必须体现知道自己不是第一次索要，应该承接用户之前的拒绝、犹豫、顾虑或新信息，提供新理由或降压选择，避免机械重复。",
+      "score_levels": {
+        "0": "机械重复首次套联话术，完全无承接",
+        "1": "略有承接但新价值或降压不足",
+        "2": "清楚承接前文，并给出新的价值、解释、降级选择或隐私对冲"
+      }
+    },
+    {
+      "id": "no_extra_diagnosis_question",
+      "name_cn": "留联时不继续问诊",
+      "stage": "contact",
+      "rule_type": "penalty",
+      "evaluation_type": "llm",
+      "weight": 0.12,
+      "enabled": true,
+      "trigger_condition": "当前回复尝试索要联系方式",
+      "description": "索要联系方式时不应同时追加新的问诊问题，否则会分散用户注意力、降低留联成功率。",
+      "score_levels": {
+        "0": "留联后或留联同时继续问新的症状、病史、睡眠、用药等问诊问题",
+        "1": "存在轻微分散注意力的追问或多目标表达",
+        "2": "当前回复聚焦留联，没有追加新的问诊问题"
+      }
+    },
+    {
+      "id": "strategy_slot_consistency",
+      "name_cn": "策略槽位一致性",
+      "stage": "contact",
+      "rule_type": "quality",
+      "evaluation_type": "llm",
+      "weight": 0.12,
+      "enabled": true,
+      "trigger_condition": "当前输出包含 thought、用户模型分析、槽位填充或套联策略描述",
+      "description": "thought 中的用户画像、槽位、套联策略应与历史和最终回复一致；最终回复不应执行与自身策略相矛盾的留联渠道或价值交换。",
+      "score_levels": {
+        "0": "用户模型、槽位或策略明显错误，或与最终回复矛盾",
+        "1": "大方向正确但有少量槽位缺失、泛化或策略弱匹配",
+        "2": "用户模型、槽位、策略和最终回复一致且合理"
+      }
+    },
+    {
+      "id": "professional_risk_balance",
+      "name_cn": "专业与风险平衡",
+      "stage": "contact",
+      "rule_type": "quality",
+      "evaluation_type": "llm",
+      "weight": 0.06,
+      "enabled": true,
+      "trigger_condition": "每个留联阶段回复均检查",
+      "description": "可以有适度紧迫感，但不能虚假承诺疗效、过度恐吓、直接确诊或给出不负责任的医疗结论。",
+      "score_levels": {
+        "0": "存在明确夸大疗效、过度恐吓、直接确诊或不专业承诺",
+        "1": "表达略有风险或专业性不足，但未严重越界",
+        "2": "专业克制，紧迫感和价值交换平衡"
+      }
+    }
+  ]
+}

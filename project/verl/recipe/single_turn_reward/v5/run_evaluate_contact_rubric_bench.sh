@@ -10,7 +10,7 @@ export CANDIDATE_API_KEY="${CANDIDATE_API_KEY:-token-eval123}"
 
 export JUDGE_MODEL_NAME="${JUDGE_MODEL_NAME:-deepseek-v4-flash}"
 export JUDGE_API_BASE="${JUDGE_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
-export JUDGE_API_KEY="${JUDGE_API_KEY:-}"
+export JUDGE_API_KEY="${JUDGE_API_KEY:-your_api_key_here}"
 
 export INPUT_FILE="${INPUT_FILE:-/data/chengch/project/verl/recipe/single_turn_reward/v5/data/single_turn_rl_contact_stage_new_sources_12k_age_directed.rubric_bench_300.jsonl}"
 export RUBRIC_PATH="${RUBRIC_PATH:-/data/chengch/project/verl/recipe/single_turn_reward/v5/rubrics/contact_rubric_v001.json}"

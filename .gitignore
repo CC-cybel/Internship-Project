@@ -61,8 +61,15 @@ raw/
 *.gguf
 *.whl
 *.parquet
+*.arrow
+*.pdf
 *.jsonl
 *.log
 
-# Known generated data files outside ignored directories
+# Known generated data/output files outside ignored directories
 project/data_remake/normal_dual_full_mix.jsonl
+project/verl/recipe/opd_multi_teacher/data/
+project/verl/recipe/opd_multi_teacher/v2/data/
+project/verl/recipe/opd_multi_teacher/v3/data/
+project/verl/recipe/single_turn_reward/v5/data/
+project/TradingAgents-CN/data/

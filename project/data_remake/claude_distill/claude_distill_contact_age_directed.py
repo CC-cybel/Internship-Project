@@ -38,7 +38,7 @@ DEFAULT_OUTPUT = "/data/chengch/project/data_remake/claude_distill/single_turn_r
 DEFAULT_RAW_LOG = "/data/chengch/project/data_remake/claude_distill/logs/claude_distill_contact_age_directed_v4_no_target_raw.txt"
 DEFAULT_CACHE_DIR = "/data/chengch/project/data_remake/claude_distill/cache/contact_age_directed_v4_no_target"
 
-API_KEY = os.environ.get("CLAUDE_DISTILL_API_KEY", "")
+API_KEY = os.environ.get("CLAUDE_DISTILL_API_KEY", "your_api_key_here")
 BASE_URL = os.environ.get("CLAUDE_DISTILL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 MODEL_NAME = os.environ.get("CLAUDE_DISTILL_MODEL_NAME", "deepseek-v4-flash")
 REQUEST_TIMEOUT = float(os.environ.get("CLAUDE_DISTILL_TIMEOUT", "300"))

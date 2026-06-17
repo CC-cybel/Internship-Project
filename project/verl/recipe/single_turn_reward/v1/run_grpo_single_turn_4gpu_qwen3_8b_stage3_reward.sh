@@ -11,7 +11,7 @@ deactivate 2>/dev/null || true
 : "${CUDA_VISIBLE_DEVICES:=0,1,2,3,4,5,6,7}"
 
 : "${TONGYI_API_BASE:=https://dashscope.aliyuncs.com/compatible-mode/v1}"
-: "${TONGYI_API_KEY:=}"
+: "${TONGYI_API_KEY:=your_api_key_here}"
 : "${JUDGE_MODEL:=qwen-max}"
 
 : "${MODEL_PATH:=/data/wangpf/project/LlamaFactory/saves/qwen3-8b/full/anti_hijack_abc_stage2}"
@@ -61,7 +61,7 @@ fi
 : "${OUTPUT_DIR:=${OUTPUT_BASE_DIR}/${EXP_NAME}}"
 : "${GENRM_IO_PATH:=${OUTPUT_DIR}/genrm_io.jsonl}"
 
-: "${SWANLAB_API_KEY:=}"
+: "${SWANLAB_API_KEY:=ZqlCkcrue6FEBG24I91wi}"
 : "${SWANLAB_MODE:=cloud}"
 : "${SWANLAB_LOG_DIR:=${OUTPUT_DIR}/swanlog}"
 

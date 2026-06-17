@@ -1,0 +1,2 @@
+"""Contact rubric benchmark package."""
+

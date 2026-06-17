@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import sha1
 from openai import OpenAI
 from tqdm import tqdm
+from check_hard_rewrite_v2_object_quality import IssueCollector, check_item, SEVERE_ISSUES
 # ================= 配置 =================
 INPUT_FILE = "/data/chengch/project/data_remake/runs/hard_reverse_tongyi_v2_action.json"
 OUTPUT_FILE = "/data/chengch/project/data_remake/runs/hard_rewrite_v2.json"
@@ -17,15 +18,17 @@ RAW_TXT_LOG = "/data/chengch/project/data_remake/logs/hard_rewrite_v2.txt"      
 CACHE_DIR = "/data/chengch/project/data_remake/cache/hard_rewrite_v2"                    # 缓存目录（断点续写）
 SAVE_EVERY = 20                                  # 每处理 N 条写一次输出文件
 MAX_RETRIES = 3                                  # 请求失败重试次数
+MAX_QUALITY_RETRIES = 3                          # 质量检查失败后的重写次数
+REQUEST_TIMEOUT_SECONDS = 180                      # 单次 API 请求超时时间
 RETRY_BASE_SECONDS = 1.0                         # 重试基础等待
 RETRY_JITTER_SECONDS = 0.3                       # 重试抖动
 MAX_WORKERS = 20
 PROCESSED_FLAG = "_rewrite_done"
 
-API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
+API_KEY = os.environ.get("DASHSCOPE_API_KEY", "your_api_key_here")
 BASE_URL = os.environ.get("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 MODEL_NAME = os.environ.get("DASHSCOPE_MODEL_NAME", "deepseek-v4-flash")
-client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+client = OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS)
 log_lock = threading.Lock()
 cache_lock = threading.Lock()
 
@@ -293,14 +296,18 @@ def parse_args():
     parser.add_argument("--max-workers", type=int, default=MAX_WORKERS, help="Max worker threads.")
     parser.add_argument("--save-every", type=int, default=SAVE_EVERY, help="Save output every N items.")
     parser.add_argument("--max-retries", type=int, default=MAX_RETRIES, help="Max retries for API calls.")
+    parser.add_argument("--quality-retries", type=int, default=MAX_QUALITY_RETRIES, help="Max rewrite attempts when output quality validation fails.")
+    parser.add_argument("--request-timeout", type=float, default=REQUEST_TIMEOUT_SECONDS, help="Per-request API timeout seconds.")
     parser.add_argument("--model", default=MODEL_NAME, help="Model name.")
     parser.add_argument("--base-url", default=BASE_URL, help="Base URL.")
     parser.add_argument("--api-key", default=API_KEY, help="API key.")
+    parser.add_argument("--limit", type=int, default=None, help="Only process the first N items after offset.")
+    parser.add_argument("--offset", type=int, default=0, help="Skip the first N input items before processing.")
     return parser.parse_args()
 
 def apply_args(args):
     global INPUT_FILE, OUTPUT_FILE, CACHE_DIR, RAW_TXT_LOG
-    global MAX_WORKERS, SAVE_EVERY, MAX_RETRIES, MODEL_NAME, BASE_URL, API_KEY, client
+    global MAX_WORKERS, SAVE_EVERY, MAX_RETRIES, MAX_QUALITY_RETRIES, REQUEST_TIMEOUT_SECONDS, MODEL_NAME, BASE_URL, API_KEY, client
     INPUT_FILE = args.input
     OUTPUT_FILE = args.output
     CACHE_DIR = args.cache_dir
@@ -308,10 +315,12 @@ def apply_args(args):
     MAX_WORKERS = args.max_workers
     SAVE_EVERY = args.save_every
     MAX_RETRIES = args.max_retries
+    MAX_QUALITY_RETRIES = args.quality_retries
+    REQUEST_TIMEOUT_SECONDS = args.request_timeout
     MODEL_NAME = args.model
     BASE_URL = args.base_url
     API_KEY = args.api_key
-    client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+    client = OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS)
 
 def ensure_parent_dir(path):
     directory = os.path.dirname(path)
@@ -380,6 +389,97 @@ def parse_json_strict(raw_content):
                 return None
         return None
 
+def summarize_quality_errors(records, limit=12):
+    parts = []
+    for record in records[:limit]:
+        issue = record.get("issue", "unknown")
+        message_index = record.get("message_index")
+        detail = record.get("detail", "")
+        if message_index is None:
+            part = issue
+        else:
+            part = f"{issue}@message_{message_index}"
+        if detail:
+            part += f"({detail})"
+        parts.append(part)
+    if len(records) > limit:
+        parts.append(f"...and {len(records) - limit} more")
+    return "; ".join(parts)
+
+
+def validate_rewritten_item(original_entry, rewritten_entry):
+    collector = IssueCollector(sample_limit=3)
+    check_item(rewritten_entry, 0, collector, min_response_chars=2)
+    errors = [record for record in collector.records if record.get("issue") in SEVERE_ISSUES]
+
+    original_convs = original_entry.get("conversations") if isinstance(original_entry, dict) else None
+    rewritten_convs = rewritten_entry.get("conversations") if isinstance(rewritten_entry, dict) else None
+    if isinstance(original_convs, list) and isinstance(rewritten_convs, list):
+        original_humans = [m.get("value") for m in original_convs if isinstance(m, dict) and m.get("from") == "human"]
+        rewritten_humans = [m.get("value") for m in rewritten_convs if isinstance(m, dict) and m.get("from") == "human"]
+        if len(original_humans) != len(rewritten_humans):
+            errors.append({"issue": "human_turn_count_changed", "detail": f"original={len(original_humans)}, rewritten={len(rewritten_humans)}"})
+        else:
+            for turn_index, (old, new) in enumerate(zip(original_humans, rewritten_humans), start=1):
+                if old != new:
+                    errors.append({"issue": "human_value_changed", "detail": f"human_turn={turn_index}"})
+                    break
+        original_gpt_count = sum(1 for m in original_convs if isinstance(m, dict) and m.get("from") == "gpt")
+        rewritten_gpt_count = sum(1 for m in rewritten_convs if isinstance(m, dict) and m.get("from") == "gpt")
+        if original_gpt_count != rewritten_gpt_count:
+            errors.append({"issue": "gpt_turn_count_changed", "detail": f"original={original_gpt_count}, rewritten={rewritten_gpt_count}"})
+    return errors
+
+
+def build_retry_feedback(errors):
+    summary = summarize_quality_errors(errors)
+    return (
+        "上一次改写质量检查不合格，请重新输出完整 JSON。"
+        f" 检查失败项：{summary}。"
+        " 必须保持 human 原文和轮次不变；conversations 必须严格 human/gpt 交替；"
+        "每个 gpt.value 必须是对象，且包含非空 thought、slot_values、response；"
+        "slot_values 必须包含 age、gender、name、relationship、phone、wechat、symptom、duration、medical_history、medical_awareness；"
+        "response 必须是非空字符串，不能混入系统轮次、<action>、<think> 或 JSON 片段。"
+    )
+
+
+def make_json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): make_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [make_json_safe(v) for v in value]
+    if hasattr(value, "model_dump"):
+        return make_json_safe(value.model_dump())
+    if hasattr(value, "dict"):
+        return make_json_safe(value.dict())
+    return str(value)
+
+
+def add_usage(total, usage):
+    if not isinstance(usage, dict):
+        return total
+    for key, value in usage.items():
+        if isinstance(value, int):
+            total[key] = total.get(key, 0) + value
+    return total
+
+
+def format_usage(usage):
+    if not usage:
+        return "{}"
+    keys = ["prompt_tokens", "completion_tokens", "total_tokens", "input_tokens", "output_tokens"]
+    parts = []
+    for key in keys:
+        if key in usage:
+            parts.append(f"{key}={usage[key]}")
+    for key in sorted(usage):
+        if key not in keys and isinstance(usage[key], int):
+            parts.append(f"{key}={usage[key]}")
+    return ", ".join(parts)
+
+
 def call_llm(user_payload_json):
     last_exc = None
     for attempt in range(1, MAX_RETRIES + 1):
@@ -393,7 +493,7 @@ def call_llm(user_payload_json):
                 response_format={"type": "json_object"},
                 temperature=0.8
             )
-            return response.choices[0].message.content
+            return response.choices[0].message.content, make_json_safe(response.usage)
         except Exception as exc:
             last_exc = exc
             if attempt >= MAX_RETRIES:
@@ -406,24 +506,33 @@ def call_llm(user_payload_json):
 def is_item_processed(existing_item, input_item):
     if not isinstance(existing_item, dict):
         return False
-    if existing_item.get(PROCESSED_FLAG) is True:
-        return True
-    out_convs = existing_item.get("conversations")
-    in_convs = input_item.get("conversations") if isinstance(input_item, dict) else None
-    if out_convs and in_convs and out_convs != in_convs:
-        return True
-    return False
+    if not isinstance(input_item, dict):
+        return existing_item.get(PROCESSED_FLAG) is True
+    if existing_item.get(PROCESSED_FLAG) is not True:
+        return False
+    return not validate_rewritten_item(input_item, existing_item)
 def save_raw_log(index, content):
     with log_lock:
         ensure_parent_dir(RAW_TXT_LOG)
         with open(RAW_TXT_LOG, "a", encoding="utf-8") as f:
             f.write(f"--- ID: {index} ---\n{content}\n\n")
 
+def save_usage_log(index, attempt, usage):
+    if not usage:
+        return
+    usage_path = RAW_TXT_LOG + ".usage.jsonl"
+    record = {"index": index, "attempt": attempt, "usage": usage, "timestamp": int(time.time())}
+    with log_lock:
+        ensure_parent_dir(usage_path)
+        with open(usage_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 def process_single_item(original_entry, index, item_key):
     raw_content = ""
     try:
         if not isinstance(original_entry, dict):
-            return index, original_entry, "Skipped empty/non-dict item"
+            return index, original_entry, "Skipped empty/non-dict item", {}
         # 1. 提取原有的 system 和对话
         original_system = original_entry.get('system', '')
         original_convs = original_entry.get('conversations', [])
@@ -436,21 +545,50 @@ def process_single_item(original_entry, index, item_key):
             "conversations": original_convs
         }
 
-        # 3. 调用 API
-        raw_content = call_llm(json.dumps(user_payload, ensure_ascii=False))
-        save_raw_log(index, raw_content)
+        final_entry = None
+        quality_errors = []
+        retry_feedback = None
+        usage_total = {}
+        usage_attempts = []
+        for quality_attempt in range(1, MAX_QUALITY_RETRIES + 1):
+            current_payload = deepcopy(user_payload)
+            if retry_feedback:
+                current_payload["retry_feedback"] = retry_feedback
+                current_payload["instruction"] += "\n" + retry_feedback
 
-        # 4. 解析并拼接
-        new_data = parse_json_strict(raw_content)
-        if not new_data:
-            raise ValueError("Invalid JSON response")
-        new_conversations = new_data.get("conversations")
+            # 3. 调用 API
+            raw_content, usage = call_llm(json.dumps(current_payload, ensure_ascii=False))
+            usage_attempts.append({"attempt": quality_attempt, "usage": usage})
+            add_usage(usage_total, usage)
+            save_usage_log(index, quality_attempt, usage)
+            save_raw_log(f"{index}/attempt_{quality_attempt}", raw_content)
 
-        # 使用深拷贝保留原有的 system, extracted_info 以及其他元数据
-        final_entry = deepcopy(original_entry)
-        if new_conversations:
-            # 校验：防止模型把 human 的回复也删了，或者轮次对不上
-            final_entry["conversations"] = new_conversations
+            # 4. 解析并拼接
+            new_data = parse_json_strict(raw_content)
+            if not new_data:
+                quality_errors = [{"issue": "invalid_json_response"}]
+                retry_feedback = build_retry_feedback(quality_errors)
+                if quality_attempt < MAX_QUALITY_RETRIES:
+                    continue
+                raise ValueError("Invalid JSON response after quality retries")
+            new_conversations = new_data.get("conversations")
+
+            # 使用深拷贝保留原有的 system, extracted_info 以及其他元数据
+            candidate_entry = deepcopy(original_entry)
+            candidate_entry["conversations"] = new_conversations
+            quality_errors = validate_rewritten_item(original_entry, candidate_entry)
+            if not quality_errors:
+                final_entry = candidate_entry
+                break
+
+            retry_feedback = build_retry_feedback(quality_errors)
+            if quality_attempt < MAX_QUALITY_RETRIES:
+                continue
+
+        if final_entry is None:
+            error_summary = summarize_quality_errors(quality_errors)
+            raise ValueError(f"Quality validation failed after {MAX_QUALITY_RETRIES} attempts: {error_summary}")
+
         final_entry[PROCESSED_FLAG] = True
 
         cache_payload = {
@@ -460,10 +598,13 @@ def process_single_item(original_entry, index, item_key):
             "timestamp": int(time.time()),
             "item": final_entry,
             "raw_content": raw_content,
+            "quality_attempts": quality_attempt,
+            "token_usage": usage_total,
+            "token_usage_attempts": usage_attempts,
         }
         save_cache(item_key, cache_payload)
         
-        return index, final_entry, None
+        return index, final_entry, None, usage_total
 
     except Exception as e:
         error_msg = str(e)
@@ -476,9 +617,11 @@ def process_single_item(original_entry, index, item_key):
             "timestamp": int(time.time()),
             "error": error_msg,
             "raw_content": raw_content,
+            "token_usage": locals().get("usage_total", {}),
+            "token_usage_attempts": locals().get("usage_attempts", []),
         }
         save_cache(item_key, cache_payload)
-        return index, original_entry, error_msg
+        return index, original_entry, error_msg, locals().get("usage_total", {})
     
 
 def main():
@@ -497,6 +640,11 @@ def main():
     if not isinstance(process_list, list):
         print("❌ 输入文件必须是 list，或包含 items 列表的 dict。")
         return
+    if args.offset or args.limit is not None:
+        start = max(args.offset, 0)
+        end = None if args.limit is None else start + args.limit
+        process_list = process_list[start:end]
+        data = {"items": process_list} if isinstance(data, dict) else process_list
     total = len(process_list)
     results = [None] * total
 
@@ -553,8 +701,10 @@ def main():
             cached_item = cached["item"]
             if isinstance(cached_item, dict) and cached_item.get(PROCESSED_FLAG) is not True:
                 cached_item[PROCESSED_FLAG] = True
-            results[i] = cached_item
+            if is_item_processed(cached_item, item):
+                results[i] = cached_item
 
+    run_usage_total = {}
     pending_indices = [i for i, item in enumerate(results) if item is None and process_list[i] is not None]
     if not pending_indices:
         print("✅ 所有条目已有缓存/输出，无需重新调用 API。")
@@ -570,7 +720,8 @@ def main():
 
             with tqdm(total=total, initial=done_count) as pbar:
                 for future in as_completed(future_to_idx):
-                    idx, processed_item, error = future.result()
+                    idx, processed_item, error, usage = future.result()
+                    add_usage(run_usage_total, usage)
                     results[idx] = processed_item
                     completed_since_save += 1
                     if error:
@@ -587,6 +738,7 @@ def main():
     write_output(results, data)
 
     print(f"✅ 处理完成！结果已存至 {OUTPUT_FILE}")
+    print(f"📊 本次新调用 token 消耗: {format_usage(run_usage_total)}")
 
 def write_output(results, original_data):
     output_struct = {"items": results} if isinstance(original_data, dict) else results

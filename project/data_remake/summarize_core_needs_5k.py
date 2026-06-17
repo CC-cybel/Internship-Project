@@ -17,7 +17,7 @@ OUTPUT_FILE = "/data/chengch/project/data_remake/runs/lead_needs_5k.json"
 CACHE_DIR = "/data/chengch/project/data_remake/cache/lead_needs_5k"
 RAW_LOG = "/data/chengch/project/data_remake/logs/raw_lead_needs_5k.txt"
 
-API_KEY = ""
+API_KEY = "your_api_key_here"
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 MODEL_NAME = "qwen3.6-plus"
 

@@ -17,7 +17,7 @@ from tqdm import tqdm
 INPUT_FILE = "/data/chengch/project/data_remake/intermediate/opd_offline_full_v3_a2r8_train.jsonl"
 OUTPUT_FILE = "/data/chengch/project/data_remake/outputs/claude_distlill.jsonl"
 RAW_LOG = "/data/chengch/project/data_remake/logs/claude_distlill_raw.txt"
-API_KEY = os.environ.get("CLAUDE_DISTILL_API_KEY", "")
+API_KEY = os.environ.get("CLAUDE_DISTILL_API_KEY")
 BASE_URL = os.environ.get("CLAUDE_DISTILL_BASE_URL", "https://router-hk.dingningtalk.com/v1")
 MODEL_NAME = os.environ.get("CLAUDE_DISTILL_MODEL_NAME", "anthropic/claude-sonnet-4.5")
 REQUEST_TIMEOUT = float(os.environ.get("CLAUDE_DISTILL_TIMEOUT", "300"))

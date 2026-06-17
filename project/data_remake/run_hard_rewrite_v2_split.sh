@@ -10,13 +10,13 @@ PART1_INPUT="/data/chengch/project/data_remake/runs/hard_reverse_tongyi_v2_actio
 PART1_OUTPUT="/data/chengch/project/data_remake/runs/hard_rewrite_v2_part1_0_10000.json"
 PART1_CACHE="/data/chengch/project/data_remake/cache/hard_rewrite_v2_part1_0_10000"
 PART1_LOG="/data/chengch/project/data_remake/logs/hard_rewrite_v2_part1_0_10000.txt"
-PART1_API_KEY=""
+PART1_API_KEY="your_api_key_here"
 
 PART2_INPUT="/data/chengch/project/data_remake/runs/hard_reverse_tongyi_v2_action_part2_10000_20000.json"
 PART2_OUTPUT="/data/chengch/project/data_remake/runs/hard_rewrite_v2_part2_10000_20000.json"
 PART2_CACHE="/data/chengch/project/data_remake/cache/hard_rewrite_v2_part2_10000_20000"
 PART2_LOG="/data/chengch/project/data_remake/logs/hard_rewrite_v2_part2_10000_20000.txt"
-PART2_API_KEY=""
+PART2_API_KEY="your_api_key_here"
 
 python "$SCRIPT" \
   --input "$PART1_INPUT" \

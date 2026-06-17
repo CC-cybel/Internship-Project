@@ -1,13 +1,10 @@
 /Self-Distillation-main/
 /consult_lead_analysis.md
+/verl/recipe/dual_zscore_grpo/
 /chat_web_tester/
 /rl_remake/outputs/
 *.whl
 /verl/recipe/opd_multi_teacher/data/
 /verl/recipe/opd_multi_teacher/v2/data/
-/verl/recipe/opd_multi_teacher/v3/data/
-/verl/recipe/single_turn_reward/logs/
-/verl/recipe/single_turn_reward/v5/data/
-/verl/recipe/single_turn_reward/v5/*.pdf
 __pycache__/
 *.py[cod]
